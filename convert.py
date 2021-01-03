@@ -7,17 +7,43 @@ def to_bd_node(f):
 def to_bdf_node(f):
     return "node" + f["bus"] + "_" + f["device"] + "_" + f["func"]
 
-def link(funcs, current, aggregate):
+def link(devices, current, aggregate):
     bus = int(current["bus"], 16)
-    for key in funcs.keys():
-        fs = funcs[key]
+    last = 0
+    parent = None
+    for key in devices.keys():
+        fs = devices[key]
         for f in fs:
             if f["is_pci_bridge"]:
                 if f["child_from"] <= bus and bus <= f["child_to"]:
-                    if aggregate:
-                        print('{} --> {}'.format(to_bdf_node(f), to_bd_node(current)))
-                    else:
-                        print('{} --> {}'.format(to_bdf_node(f), to_bdf_node(current)))
+                    if last < f["child_from"]:
+                        last = f["child_from"]
+                        parent = f
+
+    annotation = ""
+    if current.get("cap_speed") and current.get("cap_width"):
+        speed_to_str = {"2.5GT/s": "2.5GT/s (Gen1)", 
+                        "5GT/s": "5GT/s (Gen2)",
+                        "8GT/s": "8GT/s (Gen3)",
+                        "16GT/s": "16GT/s (Gen4)",
+                        "32GT/s": "32GT/s (Gen5)",
+                        "64GT/s": "64GT/s (Gen6)"}
+        cap_speed = current["cap_speed"]
+        if speed_to_str.get(cap_speed):
+            cap_speed = speed_to_str[cap_speed]
+        annotation = " : Capability " + cap_speed + ", " + current["cap_width"]
+
+        if current.get("sta_speed") and current.get("sta_width"):
+            sta_speed = current["sta_speed"]
+            if speed_to_str.get(sta_speed):
+                sta_speed = speed_to_str[sta_speed]
+            annotation = annotation + "\\n Status " + sta_speed + ", " + current["sta_width"]
+
+
+    if aggregate:
+        print('{} --> {}{}'.format(to_bdf_node(parent), to_bd_node(current), annotation))
+    else:
+        print('{} --> {}{}'.format(to_bdf_node(parent), to_bdf_node(current), annotation))
 
 is_pci_bridge = False
 
@@ -27,8 +53,8 @@ print("@startuml")
 print("left to right direction")
 print("rectangle root")
 
-funcs = {}
-current = None
+devices = {}
+current = {}
 for l in sys.stdin:
     m = re.match(r'([\da-f]+):([\da-f]+)\.([\da-f])\s+(.+)', l)
     if m:
@@ -46,29 +72,39 @@ for l in sys.stdin:
         f["is_pci_bridge"] = is_pci_bridge
 
         bd = f["bus"] + ":" + f["device"]
-        if funcs.get(bd):
-            funcs[bd].append(f)
+        if devices.get(bd):
+            devices[bd].append(f)
         else:
-            funcs[bd] = [f]
+            devices[bd] = [f]
 
         current = f
     else:
         if is_pci_bridge:
             m = re.match(r'\s+Bus: primary=([\da-f]+), secondary=([\da-f]+), subordinate=([\da-f]+)', l)
-
             if m:
                 current["child_from"] = int(m[2], 16)
                 current["child_to"] = int(m[3], 16)
 
-for key in funcs.keys():
-    fs = funcs[key]
+        m = re.match(r'\s+LnkCap:.+Speed (\w+?/s).*? Width (x\d+)', l)
+        if m:
+            current["cap_speed"] = m[1]
+            current["cap_width"] = m[2]
+
+        m = re.match(r'\s+LnkSta:.+Speed (\w+?/s).*? Width (x\d+)', l)
+        if m:
+            current["sta_speed"] = m[1]
+            current["sta_width"] = m[2]
+
+
+for key in devices.keys():
+    fs = devices[key]
     if len(fs) > 1:
         bd = fs[0]["bus"] + ":" + fs[0]["device"]
         node = to_bd_node(fs[0])
         if fs[0]["bus"] == "00":
             print('root --> {}'.format(node))
         else:
-            link(funcs, fs[0], True)
+            link(devices, fs[0], True)
         print('rectangle "{}" as {}'.format(bd, node) + " {")
 
     for f in fs:
@@ -87,7 +123,7 @@ for key in funcs.keys():
             if f["bus"] == "00":
                 print('root --> {}'.format(node))
             else:
-                link(funcs, f, False)
+                link(devices, f, False)
 
     if len(fs) > 1:
         print('}')
