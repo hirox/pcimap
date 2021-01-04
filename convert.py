@@ -1,5 +1,12 @@
+desc = 'Convert lspci output to plantuml'
+
 import sys
 import re
+import argparse
+
+parser = argparse.ArgumentParser(description=desc)
+parser.add_argument('-m', '--markdown', action='store_true')
+args = parser.parse_args()
 
 def to_bd_node(f):
     return "node" + f["bus"] + "_" + f["device"]
@@ -47,9 +54,10 @@ def link(devices, current):
 
 is_pci_bridge = False
 
-print("```plantuml")
-print("@startuml")
+if args.markdown:
+    print("```plantuml")
 
+print("@startuml")
 print("left to right direction")
 print("rectangle root")
 
@@ -120,4 +128,5 @@ for key in devices.keys():
         print('}')
 
 print("@enduml")
-print("```")
+if args.markdown:
+    print("```")
