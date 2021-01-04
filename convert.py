@@ -7,7 +7,7 @@ def to_bd_node(f):
 def to_bdf_node(f):
     return "node" + f["bus"] + "_" + f["device"] + "_" + f["func"]
 
-def link(devices, current, aggregate):
+def link(devices, current):
     bus = int(current["bus"], 16)
     last = 0
     parent = None
@@ -39,11 +39,11 @@ def link(devices, current, aggregate):
                 sta_speed = speed_to_str[sta_speed]
             annotation = annotation + "\\n Status " + sta_speed + ", " + current["sta_width"]
 
+    from_node = "root"
+    if parent:
+        from_node = to_bdf_node(parent)
 
-    if aggregate:
-        print('{} --> {}{}'.format(to_bdf_node(parent), to_bd_node(current), annotation))
-    else:
-        print('{} --> {}{}'.format(to_bdf_node(parent), to_bdf_node(current), annotation))
+    print('{} --> {}{}'.format(from_node, to_bdf_node(current), annotation))
 
 is_pci_bridge = False
 
@@ -85,12 +85,12 @@ for l in sys.stdin:
                 current["child_from"] = int(m[2], 16)
                 current["child_to"] = int(m[3], 16)
 
-        m = re.match(r'\s+LnkCap:.+Speed (\w+?/s).*? Width (x\d+)', l)
+        m = re.match(r'\s+LnkCap:.+Speed ([\w\.]+?/s).*? Width (x\d+)', l)
         if m:
             current["cap_speed"] = m[1]
             current["cap_width"] = m[2]
 
-        m = re.match(r'\s+LnkSta:.+Speed (\w+?/s).*? Width (x\d+)', l)
+        m = re.match(r'\s+LnkSta:.+Speed ([\w\.]+?/s).*? Width (x\d+)', l)
         if m:
             current["sta_speed"] = m[1]
             current["sta_width"] = m[2]
@@ -101,10 +101,6 @@ for key in devices.keys():
     if len(fs) > 1:
         bd = fs[0]["bus"] + ":" + fs[0]["device"]
         node = to_bd_node(fs[0])
-        if fs[0]["bus"] == "00":
-            print('root --> {}'.format(node))
-        else:
-            link(devices, fs[0], True)
         print('rectangle "{}" as {}'.format(bd, node) + " {")
 
     for f in fs:
@@ -114,16 +110,11 @@ for key in devices.keys():
 
         node = to_bdf_node(f)
         print('rectangle {} ['.format(node))
-        print(f["bus"] + ":" + f["device"] + "." + f["func"])
-        print(device_type)
+        print(f["bus"] + ":" + f["device"] + "." + f["func"] + " " + device_type)
         print(device_name)
         print(']')
 
-        if len(fs) == 1:
-            if f["bus"] == "00":
-                print('root --> {}'.format(node))
-            else:
-                link(devices, f, False)
+        link(devices, f)
 
     if len(fs) > 1:
         print('}')
