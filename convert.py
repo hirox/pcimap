@@ -93,6 +93,10 @@ for l in sys.stdin:
                 current["child_from"] = int(m[2], 16)
                 current["child_to"] = int(m[3], 16)
 
+        m = re.match(r'\s+DevSta:\s*(.+)', l)
+        if m:
+            current["dev_status"] = m[1]
+
         m = re.match(r'\s+LnkCap:.+Speed ([\w\.]+?/s).*? Width (x\d+)', l)
         if m:
             current["cap_speed"] = m[1]
@@ -120,6 +124,11 @@ for key in devices.keys():
         print('rectangle {} ['.format(node))
         print(f["bus"] + ":" + f["device"] + "." + f["func"] + " " + device_type)
         print(device_name)
+
+        if f.get("dev_status"):
+            m = re.match(r'.*(?<!UnsuppReq)(?<!AuxPwr)\+', f["dev_status"])
+            if m:
+                print("<color:red>", f["dev_status"], "</color>", sep='')
         print(']')
 
         link(devices, f)
